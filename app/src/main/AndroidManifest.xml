@@ -128,6 +128,8 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
             <!-- Accept multiple file types to let Termux be usable as generic file viewer. -->
+            <!-- Disabled because I'm not used -->
+            <!--
             <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
 
@@ -139,6 +141,7 @@
                 <data android:mimeType="text/*" />
                 <data android:mimeType="video/*" />
             </intent-filter>
+            -->
         </activity>
 
 

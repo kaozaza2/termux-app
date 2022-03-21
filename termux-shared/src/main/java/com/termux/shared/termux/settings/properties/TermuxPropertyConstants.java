@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Set;
 
 /*
- * Version: v0.16.0
+ * Version: v0.17.0
  * SPDX-License-Identifier: MIT
  *
  * Changelog
@@ -73,6 +73,9 @@ import java.util.Set;
  *
  * - 0.16.0 (2021-10-21)
  *      - Add `KEY_NIGHT_MODE`.
+ *
+ * - 0.17.0 (2022-03-17)
+ *      - Add `KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT`.
  */
 
 /**
@@ -94,6 +97,7 @@ public final class TermuxPropertyConstants {
 
     /** Defines the key for whether hardware keyboard shortcuts are enabled. */
     public static final String KEY_DISABLE_HARDWARE_KEYBOARD_SHORTCUTS =  "disable-hardware-keyboard-shortcuts"; // Default: "disable-hardware-keyboard-shortcuts"
+
 
 
     /** Defines the key for whether a toast will be shown when user changes the terminal session */
@@ -199,17 +203,30 @@ public final class TermuxPropertyConstants {
 
 
 
+
+    /**
+     * Defines the key for how many days old the access time should be of files that should be
+     * deleted from $TMPDIR on termux exit.
+     * `-1` for none, `0` for all and `> 0` for x days.
+     */
+    public static final String KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT =  "delete-tmpdir-files-older-than-x-days-on-exit"; // Default: "delete-tmpdir-files-older-than-x-days-on-exit"
+    public static final int IVALUE_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT_MIN = -1;
+    public static final int IVALUE_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT_MAX = 100000;
+    public static final int DEFAULT_IVALUE_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT = 3;
+
+
+
     /** Defines the key for the terminal margin on left and right in dp units */
     public static final String KEY_TERMINAL_MARGIN_HORIZONTAL =  "terminal-margin-horizontal"; // Default: "terminal-margin-horizontal"
     public static final int IVALUE_TERMINAL_MARGIN_HORIZONTAL_MIN = 0;
     public static final int IVALUE_TERMINAL_MARGIN_HORIZONTAL_MAX = 100;
-    public static final int DEFAULT_IVALUE_TERMINAL_HORIZONTAL_MARGIN = 3;
+    public static final int DEFAULT_IVALUE_TERMINAL_MARGIN_HORIZONTAL = 3;
 
     /** Defines the key for the terminal margin on top and bottom in dp units */
     public static final String KEY_TERMINAL_MARGIN_VERTICAL =  "terminal-margin-vertical"; // Default: "terminal-margin-vertical"
     public static final int IVALUE_TERMINAL_MARGIN_VERTICAL_MIN = 0;
     public static final int IVALUE_TERMINAL_MARGIN_VERTICAL_MAX = 100;
-    public static final int DEFAULT_IVALUE_TERMINAL_VERTICAL_MARGIN = 0;
+    public static final int DEFAULT_IVALUE_TERMINAL_MARGIN_VERTICAL = 0;
 
 
 
@@ -355,7 +372,7 @@ public final class TermuxPropertyConstants {
     /** Defines the set for keys loaded by termux
      * Setting this to {@code null} will make {@link SharedProperties} throw an exception.
      * */
-    public static final Set<String> TERMUX_PROPERTIES_LIST = new HashSet<>(Arrays.asList(
+    public static final Set<String> TERMUX_APP_PROPERTIES_LIST = new HashSet<>(Arrays.asList(
         /* boolean */
         KEY_DISABLE_HARDWARE_KEYBOARD_SHORTCUTS,
         KEY_DISABLE_TERMINAL_SESSION_CHANGE_TOAST,
@@ -370,6 +387,7 @@ public final class TermuxPropertyConstants {
 
         /* int */
         KEY_BELL_BEHAVIOUR,
+        KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT,
         KEY_TERMINAL_CURSOR_BLINK_RATE,
         KEY_TERMINAL_CURSOR_STYLE,
         KEY_TERMINAL_MARGIN_HORIZONTAL,

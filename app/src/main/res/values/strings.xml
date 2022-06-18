@@ -33,7 +33,11 @@
     <string name="bootstrap_error_try_again">Try again</string>
     <string name="bootstrap_error_not_primary_user_message">&TERMUX_APP_NAME; can only be run as the primary user.
         \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
-        under any path other than %1$s.</string>
+        under any path other than:\n%1$s.</string>
+    <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; cannot be installed on
+        portable/external/removable sd card on your device.
+        \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
+        under any path other than:\n%1$s.</string>
 
 
 
@@ -100,6 +104,8 @@
         Grants it from Settings -> Apps -> &TERMUX_APP_NAME; -> Advanced</string>
     <string name="error_termux_service_invalid_execution_command_runner">Invalid execution command runner to TermuxService: `%1$s`</string>
     <string name="error_termux_service_unsupported_execution_command_runner">Unsupported execution command runner to TermuxService: `%1$s`</string>
+    <string name="error_termux_service_unsupported_execution_command_shell_create_mode">Unsupported execution command shell create mode to TermuxService: `%1$s`</string>
+    <string name="error_termux_service_execution_command_shell_name_unset">Shell name not set but `%1$s` shell create mode passed</string>
 
 
 
@@ -119,8 +125,6 @@
 
 
     <!-- Miscellaneous -->
-    <string name="error_allow_external_apps_ungranted">%1$s requires `allow-external-apps`
-        property to be set to `true` in `%2$s` file.</string>
     <string name="error_termux_service_start_failed_general">Failed to start TermuxService. Check logcat for exception message.</string>
     <string name="error_termux_service_start_failed_bg">Failed to start TermuxService while app is in background due to android bg restrictions.</string>
 

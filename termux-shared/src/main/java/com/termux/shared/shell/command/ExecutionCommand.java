@@ -105,7 +105,43 @@ public class ExecutionCommand {
 
     }
 
-    /** The optional unique id for the {@link ExecutionCommand}. */
+    public enum ShellCreateMode {
+
+        /** Always create {@link TerminalSession}. */
+        ALWAYS("always"),
+
+        /** Create shell only if no shell with {@link #shellName} found. */
+        NO_SHELL_WITH_NAME("no-shell-with-name");
+
+        private final String mode;
+
+        ShellCreateMode(final String mode) {
+            this.mode = mode;
+        }
+
+        public String getMode() {
+            return mode;
+        }
+
+        public boolean equalsMode(String sessionCreateMode) {
+            return sessionCreateMode != null && sessionCreateMode.equals(this.mode);
+        }
+
+        /** Get {@link ShellCreateMode} for {@code mode} if found, otherwise {@code null}. */
+        @Nullable
+        public static ShellCreateMode modeOf(String mode) {
+            for (ShellCreateMode v : ShellCreateMode.values()) {
+                if (v.mode.equals(mode)) {
+                    return v;
+                }
+            }
+            return null;
+        }
+
+    }
+
+    /** The optional unique id for the {@link ExecutionCommand}. This should equal -1 if execution
+     * command is not going to be managed by a shell manager. */
     public Integer id;
 
     /** The process id of command. */
@@ -148,8 +184,21 @@ public class ExecutionCommand {
      */
     public Integer backgroundCustomLogLevel;
 
-    /** The session action of foreground commands. */
+
+    /** The session action of {@link Runner#TERMINAL_SESSION} commands. */
     public String sessionAction;
+
+
+    /** The shell name of commands. */
+    public String shellName;
+
+    /** The {@link ShellCreateMode} of commands. */
+    public String shellCreateMode;
+
+    /** Whether to set {@link ExecutionCommand} shell environment. */
+    public boolean setShellCommandShellEnvironment;
+
+
 
 
     /** The command label for the {@link ExecutionCommand}. */
@@ -343,6 +392,16 @@ public class ExecutionCommand {
         if (!ignoreNull || executionCommand.sessionAction != null)
             logString.append("\n").append(executionCommand.getSessionActionLogString());
 
+        if (!ignoreNull || executionCommand.shellName != null) {
+            logString.append("\n").append(executionCommand.getShellNameLogString());
+        }
+
+        if (!ignoreNull || executionCommand.shellCreateMode != null) {
+            logString.append("\n").append(executionCommand.getShellCreateModeLogString());
+        }
+
+        logString.append("\n").append(executionCommand.getSetRunnerShellEnvironmentLogString());
+
         if (!ignoreNull || executionCommand.commandIntent != null)
             logString.append("\n").append(executionCommand.getCommandIntentLogString());
 
@@ -421,7 +480,7 @@ public class ExecutionCommand {
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Current State", executionCommand.currentState.getName(), "-"));
 
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Executable", executionCommand.executable, "-"));
-        markdownString.append("\n").append(getArgumentsMarkdownString(executionCommand.arguments));
+        markdownString.append("\n").append(getArgumentsMarkdownString("Arguments", executionCommand.arguments));
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Working Directory", executionCommand.workingDirectory, "-"));
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Runner", executionCommand.runner, "-"));
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("isFailsafe", executionCommand.isFailsafe, "-"));
@@ -435,6 +494,9 @@ public class ExecutionCommand {
 
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Session Action", executionCommand.sessionAction, "-"));
 
+        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Shell Name", executionCommand.shellName, "-"));
+        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Shell Create Mode", executionCommand.shellCreateMode, "-"));
+        markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("Set Shell Command Shell Environment", executionCommand.setShellCommandShellEnvironment, "-"));
 
         markdownString.append("\n").append(MarkdownUtils.getSingleLineMarkdownStringEntry("isPluginExecutionCommand", executionCommand.isPluginExecutionCommand, "-"));
 
@@ -494,7 +556,7 @@ public class ExecutionCommand {
     }
 
     public String getArgumentsLogString() {
-        return getArgumentsLogString(arguments);
+        return getArgumentsLogString("Arguments", arguments);
     }
 
     public String getWorkingDirectoryLogString() {
@@ -522,6 +584,18 @@ public class ExecutionCommand {
 
     public String getSessionActionLogString() {
         return Logger.getSingleLineLogStringEntry("Session Action", sessionAction, "-");
+    }
+
+    public String getShellNameLogString() {
+        return Logger.getSingleLineLogStringEntry("Shell Name", shellName, "-");
+    }
+
+    public String getShellCreateModeLogString() {
+        return Logger.getSingleLineLogStringEntry("Shell Create Mode", shellCreateMode, "-");
+    }
+
+    public String getSetRunnerShellEnvironmentLogString() {
+        return "Set Shell Command Shell Environment: `" + setShellCommandShellEnvironment + "`";
     }
 
     public String getCommandDescriptionLogString() {
@@ -562,8 +636,8 @@ public class ExecutionCommand {
      * @param argumentsArray The {@link String[]} argumentsArray to convert.
      * @return Returns the log friendly {@link String}.
      */
-    public static String getArgumentsLogString(final String[] argumentsArray) {
-        StringBuilder argumentsString = new StringBuilder("Arguments:");
+    public static String getArgumentsLogString(String label, final String[] argumentsArray) {
+        StringBuilder argumentsString = new StringBuilder(label + ":");
 
         if (argumentsArray != null && argumentsArray.length != 0) {
             argumentsString.append("\n```\n");
@@ -599,8 +673,8 @@ public class ExecutionCommand {
      * @param argumentsArray The {@link String[]} argumentsArray to convert.
      * @return Returns the markdown {@link String}.
      */
-    public static String getArgumentsMarkdownString(final String[] argumentsArray) {
-        StringBuilder argumentsString = new StringBuilder("**Arguments:**");
+    public static String getArgumentsMarkdownString(String label, final String[] argumentsArray) {
+        StringBuilder argumentsString = new StringBuilder("**" + label + ":**");
 
         if (argumentsArray != null && argumentsArray.length != 0) {
             argumentsString.append("\n");

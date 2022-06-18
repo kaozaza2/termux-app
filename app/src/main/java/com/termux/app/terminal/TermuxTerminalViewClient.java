@@ -23,6 +23,7 @@ import com.termux.shared.file.FileUtils;
 import com.termux.shared.interact.MessageDialogUtils;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.shell.ShellUtils;
+import com.termux.shared.termux.TermuxBootstrap;
 import com.termux.shared.termux.terminal.TermuxTerminalViewClientBase;
 import com.termux.shared.termux.extrakeys.SpecialButton;
 import com.termux.shared.android.AndroidUtils;
@@ -56,7 +57,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     final TermuxActivity mActivity;
 
-    final TermuxTerminalSessionClient mTermuxTerminalSessionClient;
+    final TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
 
     /** Keeping track of the special keys acting as Ctrl and Fn for the soft keyboard and other hardware keys. */
     boolean mVirtualControlKeyDown, mVirtualFnKeyDown;
@@ -72,9 +73,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     private static final String LOG_TAG = "TermuxTerminalViewClient";
 
-    public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionClient termuxTerminalSessionClient) {
+    public TermuxTerminalViewClient(TermuxActivity activity, TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
         this.mActivity = activity;
-        this.mTermuxTerminalSessionClient = termuxTerminalSessionClient;
+        this.mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
     }
 
     public TermuxActivity getActivity() {
@@ -241,7 +242,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (handleVirtualKeys(keyCode, e, true)) return true;
 
         if (keyCode == KeyEvent.KEYCODE_ENTER && !currentSession.isRunning()) {
-            mTermuxTerminalSessionClient.removeFinishedSession(currentSession);
+            mTermuxTerminalSessionActivityClient.removeFinishedSession(currentSession);
             return true;
         } else if (!mActivity.getProperties().areHardwareKeyboardShortcutsDisabled() &&
             e.isCtrlPressed() && e.isAltPressed()) {
@@ -249,9 +250,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             int unicodeChar = e.getUnicodeChar(0);
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || unicodeChar == 'n'/* next */) {
-                mTermuxTerminalSessionClient.switchToSession(true);
+                mTermuxTerminalSessionActivityClient.switchToSession(true);
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP || unicodeChar == 'p' /* previous */) {
-                mTermuxTerminalSessionClient.switchToSession(false);
+                mTermuxTerminalSessionActivityClient.switchToSession(false);
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
                 mActivity.getDrawer().openDrawer(Gravity.LEFT);
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
@@ -261,9 +262,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             } else if (unicodeChar == 'm'/* menu */) {
                 mActivity.getTerminalView().showContextMenu();
             } else if (unicodeChar == 'r'/* rename */) {
-                mTermuxTerminalSessionClient.renameSession(currentSession);
+                mTermuxTerminalSessionActivityClient.renameSession(currentSession);
             } else if (unicodeChar == 'c'/* create */) {
-                mTermuxTerminalSessionClient.addNewSession(false, null);
+                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
             } else if (unicodeChar == 'u' /* urls */) {
                 showUrlSelection();
             } else if (unicodeChar == 'v') {
@@ -276,7 +277,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 changeFontSize(false);
             } else if (unicodeChar >= '1' && unicodeChar <= '9') {
                 int index = unicodeChar - '1';
-                mTermuxTerminalSessionClient.switchToSession(index);
+                mTermuxTerminalSessionActivityClient.switchToSession(index);
             }
             return true;
         }
@@ -460,7 +461,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             return true;
         } else if (ctrlDown) {
             if (codePoint == 106 /* Ctrl+j or \n */ && !session.isRunning()) {
-                mTermuxTerminalSessionClient.removeFinishedSession(session);
+                mTermuxTerminalSessionActivityClient.removeFinishedSession(session);
                 return true;
             }
 
@@ -472,16 +473,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     if (codePointLowerCase == shortcut.codePoint) {
                         switch (shortcut.shortcutAction) {
                             case TermuxPropertyConstants.ACTION_SHORTCUT_CREATE_SESSION:
-                                mTermuxTerminalSessionClient.addNewSession(false, null);
+                                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_NEXT_SESSION:
-                                mTermuxTerminalSessionClient.switchToSession(true);
+                                mTermuxTerminalSessionActivityClient.switchToSession(true);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_PREVIOUS_SESSION:
-                                mTermuxTerminalSessionClient.switchToSession(false);
+                                mTermuxTerminalSessionActivityClient.switchToSession(false);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_RENAME_SESSION:
-                                mTermuxTerminalSessionClient.renameSession(mActivity.getCurrentSession());
+                                mTermuxTerminalSessionActivityClient.renameSession(mActivity.getCurrentSession());
                                 return true;
                         }
                     }
@@ -754,11 +755,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     reportString.append("\n\n").append(TermuxUtils.getAppInfoMarkdownString(mActivity, TermuxUtils.AppInfoMode.TERMUX_PACKAGE));
                 }
 
-                reportString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(mActivity));
+                reportString.append("\n\n").append(AndroidUtils.getDeviceInfoMarkdownString(mActivity, true));
 
-                String termuxAptInfo = TermuxUtils.geAPTInfoMarkdownString(mActivity);
-                if (termuxAptInfo != null)
-                    reportString.append("\n\n").append(termuxAptInfo);
+                if (TermuxBootstrap.isAppPackageManagerAPT()) {
+                    String termuxAptInfo = TermuxUtils.geAPTInfoMarkdownString(mActivity);
+                    if (termuxAptInfo != null)
+                        reportString.append("\n\n").append(termuxAptInfo);
+                }
 
                 if (addTermuxDebugInfo) {
                     String termuxDebugInfo = TermuxUtils.getTermuxDebugMarkdownString(mActivity);

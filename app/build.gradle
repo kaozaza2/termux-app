@@ -2,6 +2,16 @@ plugins {
     id "com.android.application"
 }
 
+ext {
+    // The packageVariant defines the bootstrap variant that will be included in the app APK.
+    // This must be supported by com.termux.shared.termux.TermuxBootstrap.PackageVariant or app will
+    // crash at startup.
+    // Bootstrap of a different variant must not be manually installed by the user after app installation
+    // by replacing $PREFIX since app code is dependant on the variant used to build the APK.
+    // Currently supported values are: [ "apt-android-7" "apt-android-5" ]
+    packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
+}
+
 android {
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
     ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
@@ -36,6 +46,8 @@ android {
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
+
+        buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
 
         manifestPlaceholders.TERMUX_PACKAGE_NAME = "com.termux"
         manifestPlaceholders.TERMUX_APP_NAME = "Termux"
@@ -85,6 +97,9 @@ android {
     }
 
     compileOptions {
+        // Flag to enable support for the new language APIs
+        coreLibraryDesugaringEnabled true
+
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
@@ -115,10 +130,10 @@ android {
         variant.outputs.all { output ->
             if (variant.buildType.name == "debug") {
                 def abi = output.getFilter(com.android.build.OutputFile.ABI)
-                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : "debug") + "_" + (abi ? abi : "universal") + ".apk")
+                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + "debug") + "_" + (abi ? abi : "universal") + ".apk")
             } else if (variant.buildType.name == "release") {
                 def abi = output.getFilter(com.android.build.OutputFile.ABI)
-                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : "release") + "_" + (abi ? abi : "universal") + ".apk")
+                outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + "release") + "_" + (abi ? abi : "universal") + ".apk")
             }
         }
     }
@@ -128,6 +143,7 @@ android {
 dependencies {
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.robolectric:robolectric:4.4"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
 }
 
 task versionName {
@@ -161,7 +177,7 @@ def downloadBootstrap(String arch, String expectedChecksum, String version) {
         if (checksum == expectedChecksum) {
             return
         } else {
-            logger.quiet("Deleting old local file with wrong hash: " + localUrl)
+            logger.quiet("Deleting old local file with wrong hash: " + localUrl + ": expected: " + expectedChecksum + ", actual: " + checksum)
             file.delete()
         }
     }
@@ -196,11 +212,22 @@ clean {
 
 task downloadBootstraps() {
     doLast {
-        def version = "2022.01.07-r1"
-        downloadBootstrap("aarch64", "0fe6d0159d12fcb8baf7750ce9072b9b36f742662b02ad4da145ab85873614cd", version)
-        downloadBootstrap("arm",     "0a6014e2ec3b7079524fee3caabd02be05bcb4add3c6cd9e5ad98408b428c717", version)
-        downloadBootstrap("i686",    "c55369a9af1316dc3d99457aa23cce64b29c1e60e375159352c0d4b9cfed4ac6", version)
-        downloadBootstrap("x86_64",  "e93a7c66d15edb7d1b5ceca906255c85ead35a8b6a52f93524e117cfb07e6778", version)
+        def packageVariant = project.ext.packageVariant
+        if (packageVariant == "apt-android-7") {
+            def version = "2022.04.28-r5" + "+" + packageVariant
+            downloadBootstrap("aarch64", "4a51a7eb209fe82efc24d52e3cccc13165f27377290687cb82038cbd8e948430", version)
+            downloadBootstrap("arm", "6459a786acbae50d4c8a36fa1c3de6a4dd2d482572f6d54f73274709bd627325", version)
+            downloadBootstrap("i686", "919d212b2f19e08600938db4079e794e947365022dbfd50ac342c50fcedcd7be", version)
+            downloadBootstrap("x86_64", "61b02fdc03ea4f5d9da8d8cf018013fdc6659e6da6cbf44e9b24d1c623580b89", version)
+        } else if (packageVariant == "apt-android-5") {
+            def version = "2022.04.28-r6" + "+" + packageVariant
+            downloadBootstrap("aarch64", "913609d439415c828c5640be1b0561467e539cb1c7080662decaaca2fb4820e7", version)
+            downloadBootstrap("arm", "26bfb45304c946170db69108e5eb6e3641aad751406ce106c80df80cad2eccf8", version)
+            downloadBootstrap("i686", "46dcfeb5eef67ba765498db9fe4c50dc4690805139aa0dd141a9d8ee0693cd27", version)
+            downloadBootstrap("x86_64", "615b590679ee6cd885b7fd2ff9473c845e920f9b422f790bb158c63fe42b8481", version)
+        } else {
+            throw new GradleException("Unsupported TERMUX_PACKAGE_VARIANT \"" + packageVariant + "\"")
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.os.Build;
 import android.os.Environment;
 import android.system.Os;
 import android.util.Pair;
@@ -20,6 +21,7 @@ import com.termux.shared.errors.Error;
 import com.termux.shared.android.PackageUtils;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.TermuxUtils;
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -71,8 +73,9 @@ final class TermuxInstaller {
 
         // Termux can only be run as the primary user (device owner) since only that
         // account has the expected file system paths. Verify that:
-        if (!PackageUtils.isCurrentUserThePrimaryUser(activity)) {
-            bootstrapErrorMessage = activity.getString(R.string.bootstrap_error_not_primary_user_message, MarkdownUtils.getMarkdownCodeForString(TERMUX_PREFIX_DIR_PATH, false));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && !PackageUtils.isCurrentUserThePrimaryUser(activity)) {
+            bootstrapErrorMessage = activity.getString(R.string.bootstrap_error_not_primary_user_message,
+                MarkdownUtils.getMarkdownCodeForString(TERMUX_PREFIX_DIR_PATH, false));
             Logger.logError(LOG_TAG, "isFilesDirectoryAccessible: " + isFilesDirectoryAccessible);
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
             sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
@@ -83,7 +86,14 @@ final class TermuxInstaller {
         }
 
         if (!isFilesDirectoryAccessible) {
-            bootstrapErrorMessage = Error.getMinimalErrorString(filesDirectoryAccessibleError) + "\nTERMUX_FILES_DIR: " + MarkdownUtils.getMarkdownCodeForString(TermuxConstants.TERMUX_FILES_DIR_PATH, false);
+            bootstrapErrorMessage = Error.getMinimalErrorString(filesDirectoryAccessibleError);
+            //noinspection SdCardPath
+            if (PackageUtils.isAppInstalledOnExternalStorage(activity) &&
+                !TermuxConstants.TERMUX_FILES_DIR_PATH.equals(activity.getFilesDir().getAbsolutePath().replaceAll("^/data/user/0/", "/data/data/"))) {
+                bootstrapErrorMessage += "\n\n" + activity.getString(R.string.bootstrap_error_installed_on_portable_sd,
+                    MarkdownUtils.getMarkdownCodeForString(TERMUX_PREFIX_DIR_PATH, false));
+            }
+
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
             sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
             MessageDialogUtils.showMessage(activity,
@@ -94,10 +104,8 @@ final class TermuxInstaller {
 
         // If prefix directory exists, even if its a symlink to a valid directory and symlink is not broken/dangling
         if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)) {
-            File[] PREFIX_FILE_LIST =  TERMUX_PREFIX_DIR.listFiles();
-            // If prefix directory is empty or only contains the tmp directory
-            if(PREFIX_FILE_LIST == null || PREFIX_FILE_LIST.length == 0 || (PREFIX_FILE_LIST.length == 1 && TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH.equals(PREFIX_FILE_LIST[0].getAbsolutePath()))) {
-                Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" exists but is empty or only contains the tmp directory.");
+            if (TermuxFileUtils.isTermuxPrefixDirectoryEmpty()) {
+                Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" exists but is empty or only contains specific unimportant files.");
             } else {
                 whenDone.run();
                 return;
@@ -209,6 +217,10 @@ final class TermuxInstaller {
                     }
 
                     Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
+
+                    // Recreate env file since termux prefix was wiped earlier
+                    TermuxShellEnvironment.writeEnvironmentToFile(activity);
+
                     activity.runOnUiThread(whenDone);
 
                 } catch (final Exception e) {

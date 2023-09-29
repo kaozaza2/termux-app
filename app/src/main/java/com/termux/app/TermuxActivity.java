@@ -617,7 +617,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
 
         findViewById(R.id.toggle_keyboard_button).setOnLongClickListener(v -> {
-            //toggleTerminalToolbar();
+            toggleTerminalToolbar();
             return true;
         });
     }

@@ -40,6 +40,7 @@
     <application
         android:name=".app.TermuxApplication"
         android:allowBackup="false"
+        android:largeHeap="true"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/application_name"
@@ -144,6 +145,8 @@
             android:targetActivity=".app.api.file.FileReceiverActivity">
 
             <!-- Accept multiple file types to let Termux be usable as generic file viewer. -->
+            <!-- Disabled because I'm not used -->
+            <!--
             <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
 
@@ -155,6 +158,7 @@
                 <data android:mimeType="text/*" />
                 <data android:mimeType="video/*" />
             </intent-filter>
+            -->
         </activity-alias>
 
         <provider

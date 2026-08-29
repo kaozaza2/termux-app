@@ -12,6 +12,8 @@ import android.view.WindowManager;
 
 import com.termux.R;
 import com.termux.shared.file.FileUtils;
+import com.termux.shared.shell.command.ExecutionCommand;
+import com.termux.shared.shell.command.runner.app.AppShell;
 import com.termux.shared.termux.crash.TermuxCrashUtils;
 import com.termux.shared.termux.file.TermuxFileUtils;
 import com.termux.shared.interact.MessageDialogUtils;
@@ -24,11 +26,13 @@ import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -44,18 +48,20 @@ import static com.termux.shared.termux.TermuxConstants.TERMUX_STAGING_PREFIX_DIR
  * (1) If $PREFIX already exist, assume that it is correct and be done. Note that this relies on that we do not create a
  * broken $PREFIX directory below.
  * <p/>
- * (2) A progress dialog is shown with "Installing..." message and a spinner.
+ * (1) A package manager selection dialog is shown for select apt or pacman, this need to choose one of them.
  * <p/>
- * (3) A staging directory, $STAGING_PREFIX, is cleared if left over from broken installation below.
+ * (3) A progress dialog is shown with "Installing..." message and a spinner.
  * <p/>
- * (4) The zip file is loaded from a shared library.
+ * (4) A staging directory, $STAGING_PREFIX, is cleared if left over from broken installation below.
  * <p/>
- * (5) The zip, containing entries relative to the $PREFIX, is is downloaded and extracted by a zip input stream
+ * (5) The architecture is determined and an appropriate bootstrap zip url is determined in {@link #determineZipUrl()}.
+ * <p/>
+ * (6) The zip, containing entries relative to the $PREFIX, is is downloaded and extracted by a zip input stream
  * continuously encountering zip file entries:
  * <p/>
- * (5.1) If the zip entry encountered is SYMLINKS.txt, go through it and remember all symlinks to setup.
+ * (6.1) If the zip entry encountered is SYMLINKS.txt, go through it and remember all symlinks to setup.
  * <p/>
- * (5.2) For every other zip entry, extract it into $STAGING_PREFIX and set execute permissions if necessary.
+ * (6.2) For every other zip entry, extract it into $STAGING_PREFIX and set execute permissions if necessary.
  */
 final class TermuxInstaller {
 
@@ -114,6 +120,26 @@ final class TermuxInstaller {
             Logger.logInfo(LOG_TAG, "The termux prefix directory \"" + TERMUX_PREFIX_DIR_PATH + "\" does not exist but another file exists at its destination.");
         }
 
+        activity.runOnUiThread(() -> {
+            try {
+                new AlertDialog.Builder(activity)
+                    .setTitle(R.string.bootstrap_package_manager_title)
+                    .setMessage(R.string.bootstrap_package_manager_body)
+                    .setCancelable(false)
+                    .setPositiveButton(R.string.bootstrap_package_manager_apt, (dialog, which) -> {
+                        TermuxInstaller.installBootstrapPackages(activity, whenDone, false);
+                    })
+                    .setNeutralButton(R.string.bootstrap_package_manager_pacman, (dialog, which) -> {
+                        TermuxInstaller.installBootstrapPackages(activity, whenDone, true);
+                    })
+                    .show();
+            } catch (WindowManager.BadTokenException ignore) {
+                // Activity already dismissed - ignore.
+            }
+        });
+    }
+
+    private static void installBootstrapPackages(final Activity activity, final Runnable whenDone, final boolean isPacman) {
         final ProgressDialog progress = ProgressDialog.show(activity, null, activity.getString(R.string.bootstrap_installer_body), true, false);
         new Thread() {
             @Override
@@ -156,8 +182,8 @@ final class TermuxInstaller {
                     final byte[] buffer = new byte[8096];
                     final List<Pair<String, String>> symlinks = new ArrayList<>(50);
 
-                    final byte[] zipBytes = loadZipBytes();
-                    try (ZipInputStream zipInput = new ZipInputStream(new ByteArrayInputStream(zipBytes))) {
+                    final URL zipUrl = determineZipUrl(isPacman);
+                    try (ZipInputStream zipInput = new ZipInputStream(zipUrl.openStream())) {
                         ZipEntry zipEntry;
                         while ((zipEntry = zipInput.getNextEntry()) != null) {
                             if (zipEntry.getName().equals("SYMLINKS.txt")) {
@@ -195,7 +221,8 @@ final class TermuxInstaller {
                                             outStream.write(buffer, 0, readBytes);
                                     }
                                     if (zipEntryName.startsWith("bin/") || zipEntryName.startsWith("libexec") ||
-                                        zipEntryName.startsWith("lib/apt/apt-helper") || zipEntryName.startsWith("lib/apt/methods")) {
+                                        zipEntryName.startsWith("lib/apt/apt-helper") || zipEntryName.startsWith("lib/apt/methods") ||
+                                        zipEntryName.equals("etc/termux/bootstrap/termux-bootstrap-second-stage.sh")) {
                                         //noinspection OctalInteger
                                         Os.chmod(targetFile.getAbsolutePath(), 0700);
                                     }
@@ -216,8 +243,29 @@ final class TermuxInstaller {
                         throw new RuntimeException("Moving termux prefix staging to prefix directory failed");
                     }
 
-                    Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
+                    // Run Termux bootstrap second stage
+                    Logger.logInfo(LOG_TAG, "Running Termux bootstrap second stage.");
+                    String termuxBootstrapSecondStageFile = TERMUX_PREFIX_DIR_PATH + "/etc/termux/bootstrap/termux-bootstrap-second-stage.sh";
+                    if (FileUtils.fileExists(termuxBootstrapSecondStageFile, false)) {
+                        ExecutionCommand executionCommand = new ExecutionCommand(-1,
+                                termuxBootstrapSecondStageFile, null, null,
+                                null, ExecutionCommand.Runner.APP_SHELL.getName(), false);
+                        executionCommand.commandLabel = "Termux Bootstrap Second Stage Command";
+                        executionCommand.backgroundCustomLogLevel = Logger.LOG_LEVEL_NORMAL;
+                        AppShell appShell = AppShell.execute(activity, executionCommand, null, new TermuxShellEnvironment(), null, true);
+                        boolean stderrSet = !executionCommand.resultData.stderr.toString().isEmpty();
+                        if (appShell == null || !executionCommand.isSuccessful() || executionCommand.resultData.exitCode != 0 || stderrSet) {
+                            // Delete prefix directory as otherwise when app is restarted, the broken prefix directory would be used and logged into
+                            error = FileUtils.deleteFile("termux prefix directory", TERMUX_PREFIX_DIR_PATH, true);
+                            if (error != null)
+                                Logger.logErrorExtended(LOG_TAG, error.toString());
 
+                            showBootstrapErrorDialog(activity, whenDone, MarkdownUtils.getMarkdownCodeForString(executionCommand.toString(), true));
+                            return;
+                        }
+                    }
+
+                    Logger.logInfo(LOG_TAG, "Bootstrap packages installed successfully.");
                     // Recreate env file since termux prefix was wiped earlier
                     TermuxShellEnvironment.writeEnvironmentToFile(activity);
 
@@ -281,6 +329,7 @@ final class TermuxInstaller {
         Logger.logInfo(LOG_TAG, "Setting up storage symlinks.");
 
         new Thread() {
+            @Override
             public void run() {
                 try {
                     Error error;
@@ -375,12 +424,40 @@ final class TermuxInstaller {
         return FileUtils.createDirectoryFile(directory.getAbsolutePath());
     }
 
-    public static byte[] loadZipBytes() {
-        // Only load the shared library when necessary to save memory usage.
-        System.loadLibrary("termux-bootstrap");
-        return getZip();
+    private static URL determineZipUrl() throws MalformedURLException {
+        return TermuxInstaller.determineZipUrl(false);
     }
 
-    public static native byte[] getZip();
+    private static URL determineZipUrl(final boolean isPacman) throws MalformedURLException {
+        String archName = determineTermuxArchName();
+        String repo = "https://github.com/termux/termux-packages";
+        if (isPacman) {
+            repo = "https://github.com/termux-pacman/termux-packages";
+        }
+        String url = repo + "/releases/latest/download/bootstrap-" + archName + ".zip";
+        return new URL(url);
+    }
 
+    private static String determineTermuxArchName() {
+        // Note that we cannot use System.getProperty("os.arch") since that may give e.g. "aarch64"
+        // while a 64-bit runtime may not be installed (like on the Samsung Galaxy S5 Neo).
+        // Instead we search through the supported abi:s on the device, see:
+        // http://developer.android.com/ndk/guides/abis.html
+        // Note that we search for abi:s in preferred order (the ordering of the
+        // Build.SUPPORTED_ABIS list) to avoid e.g. installing arm on an x86 system where arm
+        // emulation is available.
+        for (String androidArch : Build.SUPPORTED_ABIS) {
+            switch(androidArch) {
+                case "arm64-v8a":
+                    return "aarch64";
+                case "armeabi-v7a":
+                    return "arm";
+                case "x86_64":
+                    return "x86_64";
+                case "x86":
+                    return "i686";
+            }
+        }
+        throw new RuntimeException("Unable to determine arch from Build.SUPPORTED_ABIS =  " + Arrays.toString(Build.SUPPORTED_ABIS));
+    }
 }

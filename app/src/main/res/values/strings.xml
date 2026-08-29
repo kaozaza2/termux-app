@@ -38,6 +38,11 @@
         portable/external/removable sd card on your device.
         \nBootstrap binaries compiled for &TERMUX_APP_NAME; have hardcoded $PREFIX path and cannot be installed
         under any path other than:\n%1$s.</string>
+    <string name="bootstrap_package_manager_title">Package Manager</string>
+    <string name="bootstrap_package_manager_body">Choose a package manager to set up Termux
+        \nThis will be the default package manager.</string>
+    <string name="bootstrap_package_manager_apt">APT</string>
+    <string name="bootstrap_package_manager_pacman">Pacman</string>
 
 
 

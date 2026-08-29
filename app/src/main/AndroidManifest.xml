@@ -118,6 +118,13 @@
             tools:targetApi="n">
         </activity>
 
+        <activity
+            android:name=".app.RunCommandConfirmationActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:theme="@style/TermuxAlertDialogStyle" />
+
         <activity-alias
             android:name=".app.api.file.FileShareReceiverActivity"
             android:exported="true"

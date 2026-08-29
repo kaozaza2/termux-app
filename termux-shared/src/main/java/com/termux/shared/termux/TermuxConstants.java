@@ -855,6 +855,16 @@ public final class TermuxConstants {
     /** Termux app unique notification id used by {@link TERMUX_APP.RUN_COMMAND_SERVICE} */
     public static final int TERMUX_RUN_COMMAND_NOTIFICATION_ID = 1338;
 
+    /** Termux app notification channel id used by the RUN_COMMAND confirmation prompt shown by
+     * {@link TERMUX_APP.RUN_COMMAND_SERVICE} before a {@code RUN_COMMAND} execution command is started */
+    public static final String TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_CHANNEL_ID = "termux_run_command_confirmation_notification_channel";
+    /** Termux app notification channel name used by the RUN_COMMAND confirmation prompt shown by
+     * {@link TERMUX_APP.RUN_COMMAND_SERVICE} before a {@code RUN_COMMAND} execution command is started */
+    public static final String TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_CHANNEL_NAME = TermuxConstants.TERMUX_APP_NAME + " Command Confirmation";
+    /** Termux app base unique notification id used by the RUN_COMMAND confirmation prompt shown by
+     * {@link TERMUX_APP.RUN_COMMAND_SERVICE} before a {@code RUN_COMMAND} execution command is started */
+    public static final int TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_ID = 1340;
+
     /** Termux app notification channel id used for plugin command errors */
     public static final String TERMUX_PLUGIN_COMMAND_ERRORS_NOTIFICATION_CHANNEL_ID = "termux_plugin_command_errors_notification_channel";
     /** Termux app notification channel name used for plugin command errors */
@@ -1189,6 +1199,25 @@ public final class TermuxConstants {
              * created in {@link #EXTRA_RESULT_DIRECTORY} if {@link #EXTRA_RESULT_SINGLE_FILE} is
              * {@code false} for the RUN_COMMAND_SERVICE.ACTION_RUN_COMMAND intent */
             public static final String EXTRA_RESULT_FILES_SUFFIX = TERMUX_PACKAGE_NAME + ".RUN_COMMAND_RESULT_FILES_SUFFIX"; // Default: "com.termux.RUN_COMMAND_RESULT_FILES_SUFFIX"
+
+
+            /** Intent {@code Parcelable} extra for the {@link TERMUX_APP.TERMUX_SERVICE#ACTION_SERVICE_EXECUTE}
+             * execution command intent that should be started if the user allows the command to run.
+             * Only used internally by the RUN_COMMAND confirmation prompt. */
+            public static final String EXTRA_EXEC_INTENT = TERMUX_PACKAGE_NAME + ".RUN_COMMAND_EXEC_INTENT"; // Default: "com.termux.RUN_COMMAND_EXEC_INTENT"
+            /** Intent {@code String} extra for the package name of the app that started the RUN_COMMAND
+             * command, derived from the {@link #EXTRA_PENDING_INTENT} creator. May be {@code null}
+             * if {@link #EXTRA_PENDING_INTENT} was not set. Only used internally by the RUN_COMMAND
+             * confirmation prompt. */
+            public static final String EXTRA_CALLER_PACKAGE_NAME = TERMUX_PACKAGE_NAME + ".RUN_COMMAND_CALLER_PACKAGE_NAME"; // Default: "com.termux.RUN_COMMAND_CALLER_PACKAGE_NAME"
+            /** Intent {@code String} extra for the display label of the app that started the RUN_COMMAND
+             * command. May be {@code null} if it could not be resolved. Only used internally by the
+             * RUN_COMMAND confirmation prompt. */
+            public static final String EXTRA_CALLER_APP_LABEL = TERMUX_PACKAGE_NAME + ".RUN_COMMAND_CALLER_APP_LABEL"; // Default: "com.termux.RUN_COMMAND_CALLER_APP_LABEL"
+            /** Intent {@code int} extra for the id of the fallback notification shown for the RUN_COMMAND
+             * confirmation prompt. Set to {@code -1} if no notification was shown. Only used internally
+             * by the RUN_COMMAND confirmation prompt. */
+            public static final String EXTRA_CONFIRMATION_NOTIFICATION_ID = TERMUX_PACKAGE_NAME + ".RUN_COMMAND_CONFIRMATION_NOTIFICATION_ID"; // Default: "com.termux.RUN_COMMAND_CONFIRMATION_NOTIFICATION_ID"
 
         }
     }

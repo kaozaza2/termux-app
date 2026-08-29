@@ -124,6 +124,19 @@
     <string name="error_run_command_service_invalid_execution_command_runner">Invalid execution command runner to RunCommandService: `%1$s`</string>
     <string name="error_run_command_service_mandatory_extra_missing">Mandatory extra missing to RunCommandService: \"%1$s\"</string>
     <string name="error_run_command_service_api_help">Visit %1$s for more info on RUN_COMMAND Intent usage.</string>
+    <string name="error_run_command_service_denied_by_user">RunCommand execution denied by user.</string>
+
+    <!-- Termux RunCommandService confirmation -->
+    <string name="run_command_confirm_title">Allow command to run in Termux?</string>
+    <string name="run_command_confirm_caller_unknown">Unknown app</string>
+    <string name="run_command_confirm_caller_label">From: %1$s</string>
+    <string name="run_command_confirm_command_label">Command: %1$s</string>
+    <string name="run_command_confirm_arguments_label">Arguments: %1$s</string>
+    <string name="run_command_confirm_workdir_label">Working Directory: %1$s</string>
+    <string name="run_command_confirm_remember">Don\'t ask again for %1$s</string>
+    <string name="run_command_confirm_allow">Allow</string>
+    <string name="run_command_confirm_deny">Deny</string>
+    <string name="run_command_confirm_notification_text">%1$s wants to run command: %2$s</string>
 
 
 

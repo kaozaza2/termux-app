@@ -2,8 +2,12 @@ package com.termux.app;
 
 import android.app.Notification;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
@@ -12,6 +16,7 @@ import android.os.IBinder;
 import com.termux.R;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.data.IntentUtils;
+import com.termux.shared.net.uri.UriUtils;
 import com.termux.shared.termux.plugins.TermuxPluginUtils;
 import com.termux.shared.termux.file.TermuxFileUtils;
 import com.termux.shared.file.filesystem.FileType;
@@ -26,6 +31,8 @@ import com.termux.shared.notification.NotificationUtils;
 import com.termux.shared.shell.command.ExecutionCommand;
 import com.termux.shared.shell.command.ExecutionCommand.Runner;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * A service that receives {@link RUN_COMMAND_SERVICE#ACTION_RUN_COMMAND} intent from third party apps and
  * plugins that contains info on command execution and forwards the extras to {@link TermuxService}
@@ -36,6 +43,8 @@ import com.termux.shared.shell.command.ExecutionCommand.Runner;
 public class RunCommandService extends Service {
 
     private static final String LOG_TAG = "RunCommandService";
+
+    private static final AtomicInteger sConfirmationNotificationCounter = new AtomicInteger(0);
 
     class LocalBinder extends Binder {
         public final RunCommandService service = RunCommandService.this;
@@ -242,12 +251,9 @@ public class RunCommandService extends Service {
             execIntent.putExtra(TERMUX_SERVICE.EXTRA_RESULT_FILES_SUFFIX, executionCommand.resultConfig.resultFilesSuffix);
         }
 
-        // Start TERMUX_SERVICE and pass it execution intent
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            this.startForegroundService(execIntent);
-        } else {
-            this.startService(execIntent);
-        }
+        // Start the execution command only after the user has been asked to confirm it, since the
+        // RUN_COMMAND permission can be requested and granted to any app
+        startServiceExecuteIntentForPluginCaller(execIntent, executionCommand);
 
         return stopService();
     }
@@ -255,6 +261,130 @@ public class RunCommandService extends Service {
     private int stopService() {
         runStopForeground();
         return Service.START_NOT_STICKY;
+    }
+
+    /**
+     * Start the {@link TERMUX_SERVICE#ACTION_SERVICE_EXECUTE} exec intent after checking whether the
+     * user needs to confirm the RUN_COMMAND execution first.
+     *
+     * If a decision has previously been remembered for the calling app, then that decision is used,
+     * otherwise the user is asked for confirmation via a dialog. A fallback notification, which opens
+     * the confirmation dialog when tapped, is also shown since a service cannot always start an
+     * activity when the app is in the background.
+     *
+     * @param execIntent The {@link TERMUX_SERVICE#ACTION_SERVICE_EXECUTE} intent to start if the
+     *                   command is allowed.
+     * @param executionCommand The {@link ExecutionCommand} matching the exec intent, used to send a
+     *                         result back if the command is denied.
+     */
+    private void startServiceExecuteIntentForPluginCaller(Intent execIntent, ExecutionCommand executionCommand) {
+        // A started service cannot determine the uid of the app which started it, so the caller
+        // package name is derived from the creator of the pending intent (if one was sent) since
+        // that is recorded by the system and cannot be spoofed.
+        String callerPackageName = null;
+        if (executionCommand.resultConfig.resultPendingIntent != null)
+            callerPackageName = executionCommand.resultConfig.resultPendingIntent.getCreatorPackage();
+
+        if (callerPackageName != null) {
+            Boolean rememberedDecision = RunCommandConfirmationActivity.getRememberedDecision(this, callerPackageName);
+            if (Boolean.TRUE.equals(rememberedDecision)) {
+                // User had previously allowed this app to run commands
+                startServiceExecuteIntent(execIntent);
+                return;
+            } else if (Boolean.FALSE.equals(rememberedDecision)) {
+                // User had previously denied command execution to this app
+                String errmsg = this.getString(R.string.error_run_command_service_denied_by_user);
+                executionCommand.setStateFailed(Errno.ERRNO_FAILED.getCode(), errmsg);
+                TermuxPluginUtils.processPluginExecutionCommandError(this, LOG_TAG, executionCommand, false);
+                return;
+            }
+        }
+
+        int notificationId = TermuxConstants.TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_ID + sConfirmationNotificationCounter.incrementAndGet();
+
+        Intent confirmationIntent = new Intent(this, RunCommandConfirmationActivity.class);
+        confirmationIntent.putExtra(RUN_COMMAND_SERVICE.EXTRA_EXEC_INTENT, execIntent);
+        confirmationIntent.putExtra(RUN_COMMAND_SERVICE.EXTRA_CALLER_PACKAGE_NAME, callerPackageName);
+        confirmationIntent.putExtra(RUN_COMMAND_SERVICE.EXTRA_CALLER_APP_LABEL, getCallerLabel(callerPackageName));
+        confirmationIntent.putExtra(RUN_COMMAND_SERVICE.EXTRA_CONFIRMATION_NOTIFICATION_ID, notificationId);
+        confirmationIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        showRunCommandConfirmationNotification(confirmationIntent, notificationId, callerPackageName, getCommandSummaryForDisplay(execIntent));
+
+        try {
+            startActivity(confirmationIntent);
+        } catch (RuntimeException e) {
+            // Starting an activity from the background may be restricted by Android. The confirmation
+            // notification shown above still allows the user to review and approve or deny the command.
+            Logger.logError(LOG_TAG, "Failed to start RunCommandConfirmationActivity: " + e.getMessage());
+        }
+    }
+
+    /** Start {@link TERMUX_SERVICE} and pass it the exec intent. */
+    private void startServiceExecuteIntent(Intent execIntent) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            this.startForegroundService(execIntent);
+        } else {
+            this.startService(execIntent);
+        }
+    }
+
+    /** Get the display label of the caller app, falling back to the package name. */
+    private String getCallerLabel(String callerPackageName) {
+        if (callerPackageName == null) return null;
+        try {
+            PackageManager packageManager = getPackageManager();
+            ApplicationInfo applicationInfo = packageManager.getApplicationInfo(callerPackageName, 0);
+            return packageManager.getApplicationLabel(applicationInfo).toString();
+        } catch (PackageManager.NameNotFoundException e) {
+            return callerPackageName;
+        }
+    }
+
+    /** Get a short command summary (executable and first argument) for the confirmation notification. */
+    private String getCommandSummaryForDisplay(Intent execIntent) {
+        String executable = UriUtils.getUriFilePathWithFragment(execIntent.getData());
+        String commandSummary = DataUtils.getDefaultIfNull(executable, "-");
+
+        String[] arguments = IntentUtils.getStringArrayExtraIfSet(execIntent, TERMUX_SERVICE.EXTRA_ARGUMENTS, null);
+        if (arguments != null && arguments.length != 0)
+            commandSummary += " " + DataUtils.getTruncatedCommandOutput(arguments[0], 100, true, false, true);
+
+        return commandSummary;
+    }
+
+    /** Show a fallback notification for the RUN_COMMAND confirmation prompt. */
+    private void showRunCommandConfirmationNotification(Intent confirmationIntent, int notificationId, String callerPackageName, String commandSummary) {
+        NotificationUtils.setupNotificationChannel(this, TermuxConstants.TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_CHANNEL_ID,
+            TermuxConstants.TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH);
+
+        int pendingIntentFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            pendingIntentFlags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent contentIntent = PendingIntent.getActivity(this, notificationId, confirmationIntent, pendingIntentFlags);
+
+        String callerLabel = callerPackageName != null ? getCallerLabel(callerPackageName) :
+            getString(R.string.run_command_confirm_caller_unknown);
+
+        Notification.Builder builder = NotificationUtils.geNotificationBuilder(this,
+            TermuxConstants.TERMUX_RUN_COMMAND_CONFIRMATION_NOTIFICATION_CHANNEL_ID,
+            Notification.PRIORITY_HIGH,
+            getString(R.string.run_command_confirm_title),
+            getString(R.string.run_command_confirm_notification_text, callerLabel, commandSummary),
+            null,
+            contentIntent,
+            null,
+            NotificationUtils.NOTIFICATION_MODE_SOUND);
+        if (builder == null) return;
+
+        builder.setSmallIcon(R.drawable.ic_service_notification);
+        builder.setColor(0xFF607D8B);
+        builder.setOnlyAlertOnce(true);
+        builder.setAutoCancel(true);
+
+        NotificationManager notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (notificationManager != null)
+            notificationManager.notify(notificationId, builder.build());
     }
 
     private void runStartForeground() {
